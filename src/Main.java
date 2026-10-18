@@ -6,36 +6,28 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.security.KeyFactory;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.SecureRandom;
+import java.security.*;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 public class Main {
-    private String email;
-    private String chave_publica;
-    private String chave_privada;
-    private Byte[] array = new Byte[10240];
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         System.out.print("Digite a frase secreta do administrador: ");
         String frase_secreta = scanner.nextLine();
+        PublicKey chavePublica = null;
+        PrivateKey chavePrivada = null;
         try {
-            PrivateKey chavePrivada = restaurarChavePrivada("resources/Pacote-T3/Keys/admin-pkcs8-aes.key", frase_secreta);
+            chavePrivada = restaurarChavePrivada("resources/Pacote-T3/Keys/user01-pkcs8-aes.key", frase_secreta);
         }catch (Exception e){
             System.out.print("Erro");
         }
 
         try {
-            X509Certificate certificado = extrairInfosCertificado("resources/Pacote-T3/Keys/admin-x509.crt");
+            X509Certificate certificado = extrairInfosCertificado("resources/Pacote-T3/Keys/user01-x509.crt");
             System.out.printf("Versão: %d\n", certificado.getVersion());
             System.out.printf("Série: %s\n", certificado.getSerialNumber().toString(16));
             System.out.printf("Validade: %s\n", certificado.getNotBefore().toString());
@@ -55,17 +47,24 @@ public class Main {
             String email = (fim < 0) ? dn.substring(ini) : dn.substring(ini, fim);
 
             System.out.printf("E-mail: %s\n", email);
-            PublicKey chavePublica = certificado.getPublicKey();
+            chavePublica = certificado.getPublicKey();
         } catch (Exception e) {
             System.out.print("Erro2");
         }
 
+
+
+        try{
+            System.out.println(validaParDeChaves(chavePrivada, chavePublica, 10240));
+        }catch (Exception e) {
+            System.out.print("Erro3");
+        }
     }
 
 
     // versao de recebe o path e abre o arquivo (teste)
     // obtem a chave privada asimetrica do usuario a partir da frase secreta
-    private static PrivateKey restaurarChavePrivada(String path_chave_privada, String frase_secreta) throws Exception {
+    public static PrivateKey restaurarChavePrivada(String path_chave_privada, String frase_secreta) throws Exception {
         // Derivar a chave AES (que será usada para abrir/decriptar o arquivo da chave secreta asimetrica do usuario) a partir da frase secreta
 
         //  pegando instancia de classe que gera numeros aleatorios utilizando o algoritmo SHA1PRNG
@@ -113,7 +112,7 @@ public class Main {
     }
 
     // versao que recebe os bytes
-    private PrivateKey restaurarChavePrivada(byte[] arquivo_chave_privada, String frase_secreta) throws Exception {
+    public static PrivateKey restaurarChavePrivada(byte[] arquivo_chave_privada, String frase_secreta) throws Exception {
         // Derivar a chave AES (que será usada para abrir/decriptar o arquivo da chave secreta asimetrica do usuario) a partir da frase secreta
 
         //  pegando instancia de classe que gera numeros aleatorios utilizando o algoritmo SHA1PRNG
@@ -158,8 +157,8 @@ public class Main {
         return chave_privada;
     }
 
-    // versao de recebe o path e abre o arquivo (teste)
-    private static X509Certificate extrairInfosCertificado(String path_certificado) throws Exception {
+    // versao de recebe o path e abre o arquivo de certificado para extrair infos (teste)
+    public static X509Certificate extrairInfosCertificado(String path_certificado) throws Exception {
         // pega o arquivo de certificado e le seus bytes
         byte[] arquivoCertificado = Files.readAllBytes(Paths.get(path_certificado));
 
@@ -170,8 +169,8 @@ public class Main {
 
         return certificado;
     }
-
-    private static X509Certificate extrairInfosCertificado(byte[] arquivoCertificado) throws Exception {
+    // versao que recebe os bytes
+    public static X509Certificate extrairInfosCertificado(byte[] arquivoCertificado) throws Exception {
         // cria instancia da classe para gerar certificado
         CertificateFactory cf = CertificateFactory.getInstance("X.509");
         // gerar certificado e fazer cast para X509Certificate
@@ -180,22 +179,42 @@ public class Main {
         return certificado;
     }
 
+    // possiveis erros 6007 Assinatura invalida
+    public static boolean validaParDeChaves(PrivateKey priv, PublicKey pub, int tamanho) throws Exception {
+        // gero array com numeros aleatorios
+        byte[] dados = new byte[tamanho];
+        new SecureRandom().nextBytes(dados);
 
-    private void gera_array(Byte[] array) {
+        Signature s = Signature.getInstance("SHA1withRSA");
+        s.initSign(priv);
+        s.update(dados);
+        byte[] assinatura = s.sign();
 
+        Signature v = Signature.getInstance("SHA1withRSA");
+        v.initVerify(pub);
+        v.update(dados);
+        return v.verify(assinatura);
     }
 
-    private void assinar(String chave_privada, Byte[] array) {
+    public static Object[] chaves() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Digite a frase secreta do administrador: ");
+        String frase_secreta = scanner.nextLine();
+        PublicKey chavePublica = null;
+        PrivateKey chavePrivada = null;
+        try {
+            chavePrivada = restaurarChavePrivada("resources/Pacote-T3/Keys/admin-pkcs8-aes.key", frase_secreta);
+        }catch (Exception e){
+            System.out.print("Erro");
+        }
 
-    }
-
-    private void verificar_assinatura(Byte[] array, String chave_publica) {
-
+        try {
+            X509Certificate certificado = extrairInfosCertificado("resources/Pacote-T3/Keys/admin-x509.crt");
+            chavePublica = certificado.getPublicKey();
+        } catch (Exception e) {
+            System.out.print("Erro2");
+        }
+        return new Object[] {chavePublica, chavePrivada};
     }
 
 }
-
-// a partir da frase secreta conseguir a chave privada
-// criar um array de byte de tamanho 10240
-// assinar o array com a chave privada
-// conferir assinatura com a chave publica
